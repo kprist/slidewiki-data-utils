@@ -37,7 +37,7 @@ module.exports = {
                             }
 
                             if (argv.dry) {
-                                console.log({ _id: doc._id }, { $set: setOp });
+                                console.log(dependent, { _id: doc._id }, { $set: setOp });
                             } else {
                                 bulk.find({ _id: doc._id }).updateOne({ $set: setOp });
                             }
