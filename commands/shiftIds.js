@@ -7,13 +7,25 @@ const processors = require('../lib/processors');
 
 module.exports = {
 
-    execute: function(argv) {
+    execute: async function(argv) {
         let collection = argv.collection;
         let offset = argv.offset;
 
-        connect(argv).then((db) => {
+        let processor = processors.get(collection);
+        if (!processor) {
+            console.error(`Unknown or unsupported for id shifting collection: ${collection}`);
+            return;
+        }
 
-            let processor = processors.get(collection);
+        let db = await connect(argv);
+
+        try {
+            let range = await getIdRange(db, collection);
+            if (range[0] + offset <= 0) {
+                console.error(`Cannot apply offset ${offset} to collection ${collection} (ids in: [${range}]): non-positive ids would be produced`);
+                return db.close();
+            }
+
             async.eachSeries(processor.dependents, (dependent, done) => {
                 console.log(`Processing ${collection} ids referenced in ${dependent}:`);
 
@@ -51,6 +63,11 @@ module.exports = {
                     }, (err) => {
                         if (err) return done(err);
                         if (argv.dry) return done();
+
+                        if (bulk.length === 0) {
+                            console.log('    no updates needed or found');
+                            return done();
+                        }
 
                         // now we can execute the bulkop
                         process.stdout.write('    applying update...');
@@ -104,9 +121,10 @@ module.exports = {
 
             });
 
-        }).catch((err) => {
+        } catch (err) {
             console.error(err);
-        });
+            db.close();
+        }
 
     }
 
@@ -114,11 +132,23 @@ module.exports = {
 
 const MongoClient = require('mongodb').MongoClient;
 
-function connect(argv) {
+async function connect(argv) {
     // Initialize connection once
-    return MongoClient.connect(`mongodb://${argv.host}:${argv.port}/${argv.db}`)
-        .then((database) => {
-            console.log(`Connected to mongo instance ${argv.host}:${argv.port}/${argv.db}`);
-            return database;
-        });
+    let database = await MongoClient.connect(`mongodb://${argv.host}:${argv.port}/${argv.db}`);
+    console.log(`Connected to mongo instance ${argv.host}:${argv.port}/${argv.db}`);
+    return database;
+}
+
+// returns the { min, max } ids of the collection in the database
+async function getIdRange(db, collection) {
+    let cursor = db.collection(collection).aggregate([
+        { $group: {
+            _id: null,
+            min_id: { $min: '$_id' },
+            max_id: { $max: '$_id' },
+        } }
+    ]);
+
+    let results = await cursor.toArray();
+    return [results[0].min_id, results[0].max_id];
 }
