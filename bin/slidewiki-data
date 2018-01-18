@@ -1,0 +1,23 @@
+#!/usr/bin/env node
+'use strict';
+
+require('yargs')
+    .usage('Usage: $0 <command> [options]')
+    .command('shift-ids <db> <collection> <offset>', 'shift the _id attribute for all documents in <collection> by <offset>, updating references in all other collections', (yargs) => {
+        yargs.option('port', {
+            describe: 'port to connect to',
+            default: 27017,
+        }).option('host', {
+            describe: 'host to connect to',
+            default: 'localhost',
+        });
+    }, (argv) => {
+        require('../commands/shiftIds.js').execute(argv);
+    })
+    .option('verbose', {
+        alias: 'v',
+        default: false,
+    })
+    .demandCommand()
+    .help()
+    .argv;
