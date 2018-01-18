@@ -14,6 +14,9 @@ require('yargs')
     }, (argv) => {
         require('../commands/shiftIds.js').execute(argv);
     })
+    .option('dry', {
+        default: false,
+    })
     .option('verbose', {
         alias: 'v',
         default: false,

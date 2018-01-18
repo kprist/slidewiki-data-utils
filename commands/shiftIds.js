@@ -21,11 +21,14 @@ module.exports = {
                 let bulk = col.initializeUnorderedBulkOp();
                 let cursor = col.find(processor.filterFor(dependent));
                 cursor.count().then((docCount) => {
-                    let progressBar = new ProgressBar('    preparing update for :total documents: :bar (:percent)', { total: docCount });
+                    let progressBar;
+                    if (!argv.dry) {
+                        progressBar = new ProgressBar('    preparing update for :total documents: :bar (:percent)', { total: docCount });
+                    }
 
                     cursor.forEach((doc) => {
                         try {
-                            progressBar.tick();
+                            if (progressBar) progressBar.tick();
 
                             let setOp = processor.updateReferencesIn(dependent, doc, (id) => (id + offset));
                             if (Object.keys(setOp).length === 0) {
@@ -33,8 +36,11 @@ module.exports = {
                                 return;
                             }
 
-                            bulk.find({ _id: doc._id }).updateOne({ $set: setOp });
-                            // console.log({ _id: doc._id }, { $set: setOp });
+                            if (argv.dry) {
+                                console.log({ _id: doc._id }, { $set: setOp });
+                            } else {
+                                bulk.find({ _id: doc._id }).updateOne({ $set: setOp });
+                            }
                         } catch (e) {
                             // HOW TO EXIT GRACEFULLY WITHOUT IGNORING THESE ERRORS???
                             let errorMessage = `invalid data in ${dependent} document ${JSON.stringify(doc)}\n    cause was: ${e}`;
@@ -44,6 +50,7 @@ module.exports = {
 
                     }, (err) => {
                         if (err) return done(err);
+                        if (argv.dry) return done();
 
                         // now we can execute the bulkop
                         process.stdout.write('    applying update...');
@@ -60,6 +67,8 @@ module.exports = {
                     console.error(err);
                     return db.close();
                 }
+
+                if (argv.dry) return db.close();
 
                 process.stdout.write(`Updating ids in ${collection}...`);
 
