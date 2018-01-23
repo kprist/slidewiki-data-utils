@@ -3,17 +3,36 @@
 
 require('yargs')
     .usage('Usage: $0 <command> [options]')
-    .command('shift-ids <db> <collection> <offset>', 'shift the _id attribute for all documents in <collection> by <offset>, updating references in all other collections', (yargs) => {
-        yargs.option('port', {
-            describe: 'port to connect to',
-            default: 27017,
-        }).option('host', {
-            describe: 'host to connect to',
-            default: 'localhost',
-        });
-    }, (argv) => {
-        require('../commands/shiftIds.js').execute(argv);
-    })
+    .command(
+        'shiftids <db> <collection> <offset>',
+        'shift the _id attribute for all documents in <collection> by <offset>, updating references in all other collections',
+        (yargs) => {
+            yargs.option('port', {
+                describe: 'port to connect to',
+                default: 27017,
+            }).option('host', {
+                describe: 'host to connect to',
+                default: 'localhost',
+            });
+        }, (argv) => {
+            require('../commands/shiftIds.js').execute(argv);
+        })
+    .command(
+        'matchusers <db> <other_db>',
+        'update the _id attribute for all users in <db> '
+        + 'with the _id of matching users in <other_db>, '
+        + 'while also updating references in all other collections in <db>',
+        (yargs) => {
+            yargs.option('port', {
+                describe: 'port to connect to',
+                default: 27017,
+            }).option('host', {
+                describe: 'host to connect to',
+                default: 'localhost',
+            });
+        }, (argv) => {
+            require('../commands/matchUsers.js').execute(argv);
+        })
     .option('dry', {
         default: false,
     })
