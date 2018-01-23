@@ -19,20 +19,32 @@ module.exports = {
                     }
 
                     for (let value of await db.collection(dependent).distinct(refPath, query)) {
-                        if (Number(value) < 1) {
+                        let intValue = Number(value);
+                        if (Number.isNaN(intValue) || intValue < 1) {
                             if (argv.verbose) console.warn('found invalid user reference:', value, 'at', dependent, '->', refPath);
                             continue; // skip it
                         }
-                        usersSet.add(Number(value));
+                        usersSet.add(intValue);
                     }
                 }
             }
-
             let widowCount = await db.collection('users').count({ _id: { $not: { $in: [...usersSet] } } });
             let userCount = await db.collection('users').count();
-            if (argv.dry || widowCount === 0) {
-                return console.log(`Found ${widowCount} users (of ${userCount}) without reference in ${argv.db} collections`);
+
+            console.log(`Found ${widowCount} (of ${userCount}) users without reference`);
+
+            // verify against users collection
+            let verifiedUsers = new Set(await db.collection('users').distinct('_id', { _id: { $in: [...usersSet] } }));
+            // we want those users that were referenced, but couldn't be located in database
+            let unknownUsers = [...usersSet].filter((id) => !verifiedUsers.has(id));
+            if (unknownUsers.length) {
+                console.log(`Found ${unknownUsers.length} unknown user references`);
+                if (argv.verbose) {
+                    console.log('   ' + unknownUsers.join(','));
+                }
             }
+
+            if (argv.dry || widowCount === 0) return;
 
             process.stdout.write('Removing users...');
             let opResult = await db.collection('users').deleteMany({ _id: { $not: { $in: [...usersSet] } } });
