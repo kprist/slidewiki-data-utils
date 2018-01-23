@@ -17,7 +17,8 @@ module.exports = {
                 return console.error(`Cannot apply offset ${offset} to collection ${collection} (ids in: [${range}]): non-positive ids would be produced`);
             }
 
-            let idTransform = (id) => (id + offset);
+            // apply the offset, but not in any invalid reference
+            let idTransform = (id) => (id > 0 ? (id + offset) : id);
             await dbutil.updateReferences(db, collection, idTransform, argv.dry);
 
             if (argv.dry) return;
