@@ -6,7 +6,8 @@ const processors = require('../lib/processors');
 module.exports = {
 
     execute: async function(argv) {
-        let db = await dbutil.connect(argv.db, argv.host, argv.port);
+        let client = await dbutil.connect(argv.host, argv.port);
+        let db = client.db(argv.db);
         try {
             let usersProcessor = processors.get('users');
 
@@ -53,8 +54,8 @@ module.exports = {
         } catch (err) {
             console.error(err);
         } finally {
-            console.log(`Closing connection to ${argv.db}`);
-            db.close();
+            console.log('Closing connection to database');
+            client.close();
         }
 
     }

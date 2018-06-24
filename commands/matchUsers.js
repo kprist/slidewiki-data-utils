@@ -8,8 +8,9 @@ const dbutil = require('../lib/dbutil');
 module.exports = {
 
     execute: async function(argv) {
-        let db = await dbutil.connect(argv.db, argv.host, argv.port);
+        let client = await dbutil.connect(argv.host, argv.port);
         try {
+            let db = client.db(argv.db);
             // holds the ids of the db users as keys, and the matching ids of the other db users as values
             let userIdsMatched = {};
 
@@ -17,45 +18,40 @@ module.exports = {
             let userCount = await userCursor.count();
             let progressBar = new ProgressBar('Matching :total users across databases: :bar (:percent)', { total: userCount });
 
-            let otherDb = await dbutil.connect(argv.other_db, argv.host, argv.port);
-            try {
-                // we check the ranges in the two databases, they must not overlap!
-                let range = await dbutil.getIdRange(db, 'users');
-                let otherIdsInRange = await otherDb.collection('users').count({ _id: { $gte: range[0], $lte: range[1] } });
-                if (otherIdsInRange) {
-                    return console.error(`Cannot match and update users in the databases: ${argv.other_db} includes users in ${argv.db} user_id range [${range}]`);
+            let otherDb = client.db(argv.other_db);
+
+            // we check the ranges in the two databases, they must not overlap!
+            let range = await dbutil.getIdRange(db, 'users');
+            let otherIdsInRange = await otherDb.collection('users').count({ _id: { $gte: range[0], $lte: range[1] } });
+            if (otherIdsInRange) {
+                return console.error(`Cannot match and update users in the databases: ${argv.other_db} includes users in ${argv.db} user_id range [${range}]`);
+            }
+
+            for (let user = await userCursor.next(); user != null; user = await userCursor.next()) {
+                progressBar.tick();
+
+                // find by email alone
+                let otherCursor = otherDb.collection('users')
+                    .find({ email: { $regex: new RegExp(`^${escapeRegExp(user.email)}$`, 'i') } })
+                    .project({ _id: 1, email: 1, username: 1});
+
+                let matchedUsers = await otherCursor.toArray();
+                // we expect one user at most, if there are more then there is an error in the other_db data
+                if (matchedUsers.length > 1) {
+                    matchedUsers.forEach((matchedUser) => {
+                        console.error(`matched ${Object.values(user)} => ${Object.values(matchedUser)}`);
+                    });
+                    console.error(`more than user with same email found, please verify the integrity of users in ${argv.other_db} and retry`);
+                    return;
                 }
 
-                for (let user = await userCursor.next(); user != null; user = await userCursor.next()) {
-                    progressBar.tick();
-
-                    // find by email alone
-                    let otherCursor = otherDb.collection('users')
-                        .find({ email: { $regex: new RegExp(`^${escapeRegExp(user.email)}$`, 'i') } })
-                        .project({ _id: 1, email: 1, username: 1});
-
-                    let matchedUsers = await otherCursor.toArray();
-                    // we expect one user at most, if there are more then there is an error in the other_db data
-                    if (matchedUsers.length > 1) {
-                        matchedUsers.forEach((matchedUser) => {
-                            console.error(`matched ${Object.values(user)} => ${Object.values(matchedUser)}`);
-                        });
-                        console.error(`more than user with same email found, please verify the integrity of users in ${argv.other_db} and retry`);
-                        return;
-                    }
-
-                    let matchedUser = matchedUsers[0];
-                    if (matchedUser && matchedUser._id !== user._id) {
-                        // let's put it in the userIdsMatched if the _id's differ
-                        // sign in credentials are the same, so even if the username differs, we are ok
-                        userIdsMatched[user._id] = matchedUser._id;
-                    } 
-                    // otherwise no match found, so no updating here
-                }
-
-            } finally {
-                console.log(`Closing connection to ${argv.other_db}`);
-                otherDb.close();
+                let matchedUser = matchedUsers[0];
+                if (matchedUser && matchedUser._id !== user._id) {
+                    // let's put it in the userIdsMatched if the _id's differ
+                    // sign in credentials are the same, so even if the username differs, we are ok
+                    userIdsMatched[user._id] = matchedUser._id;
+                } 
+                // otherwise no match found, so no updating here
             }
 
             if (isEmpty(userIdsMatched)) {
@@ -114,8 +110,8 @@ module.exports = {
         } catch (err) {
             console.error(err);
         } finally {
-            console.log(`Closing connection to ${argv.db}`);
-            db.close();
+            console.log('Closing connection to database');
+            client.close();
         }
 
     }

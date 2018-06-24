@@ -10,7 +10,8 @@ module.exports = {
         let collection = argv.collection;
         let offset = argv.offset;
 
-        let db = await dbutil.connect(argv.db, argv.host, argv.port);
+        let client = await dbutil.connect(argv.host, argv.port);
+        let db = client.db(argv.db);
         try {
             let range = await dbutil.getIdRange(db, collection);
             if (range[0] + offset <= 0) {
@@ -38,8 +39,8 @@ module.exports = {
         } catch (err) {
             console.error(err);
         } finally {
-            console.log(`Closing connection to ${argv.db}`);
-            db.close();
+            console.log('Closing connection to database');
+            client.close();
         }
 
     }
