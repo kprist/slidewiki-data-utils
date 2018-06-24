@@ -4,6 +4,18 @@
 require('yargs')
     .usage('Usage: $0 <command> [options]')
     .command(
+        'truncatelang <db>',
+        'truncates the language fields in decks, slides collections, replaces invalid values with "en"',
+        (yargs) => {
+            yargs.option('autofix', {
+                describe: 'attempts to automatically fix language code mismatches between document and their revisions',
+                default: false,
+            });
+        },
+        (argv) => {
+            require('../commands/truncateLang').execute(argv);
+        })
+    .command(
         'shiftids <db> <collection> <offset>',
         'shift the _id attribute for all documents in <collection> by <offset>, updating references in all other collections',
         {},
