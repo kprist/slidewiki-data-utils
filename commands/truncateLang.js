@@ -35,16 +35,16 @@ module.exports = {
 
             // reporting
             let decksMixedLanguage = await reportChangedAcrossRevisions(decks, 'language', autofix && pickLanguage);
-            // if there is a doc/rev lanugage mismatch, we can safely pick one for all if all revisions have the same
-            decksMixedLanguage = await reportDocRevValueMismatch(decks, 'language', autofix && !decksMixedLanguage && pickLanguage);
-            if (!decksMixedLanguage) {
+            // for the docs NOT in the resulting array, we can safely pick a language if all revisions have the same
+            let decksMismatchedLanguage = await reportDocRevValueMismatch(decks, 'language', autofix && pickLanguage, decksMixedLanguage);
+            if (!decksMixedLanguage.length && !decksMismatchedLanguage) {
                 console.log('All decks languages are valid and consistent!');
             }
 
             let slidesMixedLanguage = await reportChangedAcrossRevisions(slides, 'language', autofix && pickLanguage);
-            // if there is a doc/rev lanugage mismatch, we can safely pick one for all if all revisions have the same
-            slidesMixedLanguage = await reportDocRevValueMismatch(slides, 'language', autofix && !slidesMixedLanguage && pickLanguage);
-            if (!slidesMixedLanguage) {
+            // for the docs NOT in the resulting array, we can safely pick a language if all revisions have the same
+            let slidesMismatchedLanguage = await reportDocRevValueMismatch(slides, 'language', autofix && pickLanguage, slidesMixedLanguage);
+            if (!slidesMixedLanguage.length && !slidesMismatchedLanguage) {
                 console.log('All slides languages are valid and consistent!');
             }
 
@@ -194,13 +194,13 @@ async function reportChangedAcrossRevisions(col, field, pickValue) {
         }
     }
 
-    return documents.length;
+    return _.map(documents, '_id');
 }
 
 // pickValue if provided is a function that returns the prefered value among the ones provided
 // and the method will also update the proper field to match with the preferred language
 // if none is returned, no fix will be applied to that value
-async function reportDocRevValueMismatch(col, field, pickValue) {
+async function reportDocRevValueMismatch(col, field, pickValue, excludeIds) {
     let colName = col.s.name;
 
     let pipeline = [
@@ -245,7 +245,11 @@ async function reportDocRevValueMismatch(col, field, pickValue) {
         process.stdout.write(`Trying to fix mismatched ${field} values in ${colName}...`);
 
         // gather the affected document ids and values
-        let mismatches = await col.aggregate(pipeline).toArray();
+        let mismatches = await col.aggregate([
+            // exclude the doc ids in first match
+            { $match: { _id: { $nin: excludeIds } } },
+            ...pipeline,
+        ]).toArray();
         for (let mismatch of mismatches) {
             let query = { _id: mismatch._id };
             let doc = await col.findOne(query);
