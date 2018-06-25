@@ -8,6 +8,14 @@ const dbutil = require('../lib/dbutil');
 module.exports = {
 
     execute: async function(argv) {
+        // prepare manual fixes
+        let fixes = {};
+        for (let [key, value] of Object.entries(argv) ) {
+            if (key.startsWith('fix-') && value) {
+                fixes[key.substring(4)] = value;
+            }
+        }
+
         let client = await dbutil.connect(argv.host, argv.port);
         let autofix = !!argv.autofix;
         try {
@@ -18,8 +26,12 @@ module.exports = {
 
             let decks = db.collection('decks'), slides = db.collection('slides');
 
+            if (!_.isEmpty(fixes)) {
+                console.log('Using manual language code fixes', Object.entries(fixes).map((e) => e.join('=>')).join(','));
+            }
+
             process.stdout.write('Computing replacements...');
-            let replacements = await prepareReplacements(db);
+            let replacements = await prepareReplacements(db, fixes);
             if (_.isEmpty(replacements)) {
                 console.log('none needed!');
             } else {
@@ -78,7 +90,8 @@ async function ensureLanguageIndexes(db) {
 const defaultLang = 'en';
 
 // reads distinct values of language codes from db and returns a mapping to truncated/corrected values
-async function prepareReplacements(db) {
+// accepts a fixes parameter with language code fixes manually applied
+async function prepareReplacements(db, fixes={}) {
     let dbValues = [];
 
     dbValues.push(...await db.collection('decks').distinct('language'));
@@ -89,18 +102,32 @@ async function prepareReplacements(db) {
     // make them unique again
     dbValues = _.uniq(dbValues).sort();
 
-    // filter out null values, truncate the rest, replace non-trivial invalids with 'en', some other invalids with null
+    // validate them
+    let invalidCodes = _.remove(dbValues, (lang) => {
+        // keep known errors to be fixed later
+        // if there is a manual fix, also skip validation
+        if (!lang || lang === '_' || fixes[lang]) {
+            return false;
+        }
+
+        // fix format and validate
+        return !ISO6391.validate(lang.substring(0, 2).toLowerCase());
+    });
+
+    if (invalidCodes.length) {
+        console.log(`found invalid language codes: ${invalidCodes.join(',')}`);
+        console.log('aborting');
+        process.exit(0);
+    }
+
+    // filter out null values, truncate the rest, replace non-trivial invalids with 'en'
     let replacements = dbValues.filter((l) => l !== null).map((lang) => {
-        if (!lang || lang === '_'/* || typeof lang !== 'string'*/) {
+        if (!lang || lang === '_') {
             return [lang, null];
         }
 
-        let replacement = lang.substring(0, 2).toLowerCase();
-        // validate
-        if (!ISO6391.validate(replacement)) {
-            console.log(`found invalid language code ${lang}, replacing with ${defaultLang}`);
-            return [lang, defaultLang];
-        }
+        let replacement = fixes[lang] || lang;
+        replacement = replacement.substring(0, 2).toLowerCase();
 
         return [lang, replacement];
     }).filter(([lang, replacement]) => lang !== replacement);
