@@ -16,7 +16,14 @@ module.exports = {
             }
         }
 
-        let client = await dbutil.connect(argv.host, argv.port);
+        let client;
+        try {
+            client = await dbutil.connect(argv.host, argv.port);
+        } catch (err) {
+            console.error(err.message);
+            process.exit(-1);
+        }
+
         let autofix = !!argv.autofix;
         try {
             let db = client.db(argv.db);
