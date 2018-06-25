@@ -58,3 +58,13 @@ first check has passed (i.e. all their revisions have the same language),
 the command will again set a single language on both levels if possible,
 using the same criteria as in the first check.
 
+
+## Running the tool from Docker image
+
+The tool is also available via the Docker image `slidewiki/data-utils`. You can
+use it either in interactive mode by starting a shell in the container or you
+can issue a command from the command line like this:
+
+```
+docker run -it --rm slidewiki/data-utils slidewiki-data --help
+```
